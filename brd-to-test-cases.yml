@@ -1,0 +1,62 @@
+# Regenerate test artifacts when a BRD / SRS Word file is updated under Requirements/BRD/.
+#
+# Requires: default GITHUB_TOKEN with contents write (enabled by default for Actions).
+# If your default branch is protected against direct pushes, use a PAT with repo scope
+# stored as BRD_AUTOMATION_PAT and pass it to checkout + git-auto-commit, or open PRs instead.
+name: BRD → test cases
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "Requirements/BRD/**"
+      - "scripts/ci_extract_and_build_tests.py"
+      - "scripts/export_srs_v14_tests.py"
+      - "scripts/generate_brd_tests_srsfe_v14.py"
+      - ".github/workflows/brd-to-test-cases.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: brd-test-gen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Extract DOCX (if SRS) and build TSV / XLSX / MD
+        env:
+          BRD_STABLE_OUTPUT: "1"
+        run: python scripts/ci_extract_and_build_tests.py
+
+      - name: Commit generated files
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(ci): regenerate test cases from BRD [skip ci]"
+          file_pattern: |
+            Requirements/BRD/_extracted_SRS_Front_End_ACC_V1.4.txt
+            Test cases/TestCases_SRS-FrontEnd-ACC-V1.4.tsv
+            Test cases/TestCases_SRS-FrontEnd-ACC-V1.4.xlsx
+            Test cases/TestCases_BRD_SRS_FrontEnd_ACC_V1_4_latest.md
+            Test cases/TestCases_BRD_SRS_FrontEnd_ACC_V1_4_latest.tsv
+            Test cases/TestCases_BRD_SRS_FrontEnd_ACC_V1_4_latest.xlsx
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
